@@ -3,7 +3,8 @@ import glob
 import cv2
 import time
 from emailing import send_email
-from functions import get_img_path_dict
+from threading import Thread
+from functions import get_all_images, clean_folder
 
 video = cv2.VideoCapture(0)
 time.sleep(1)
@@ -25,24 +26,36 @@ while True:
     dil_frame = cv2.dilate(thresh_frame, None, iterations = 2)
     cv2.imshow("frame", dil_frame)
 
-    contours,check = cv2.findContours(dil_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, check = cv2.findContours(dil_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
         if cv2.contourArea(contour) < 5000:
             continue
         x, y, w, h = cv2.boundingRect(contour)
         rectangle = cv2.rectangle(frame, (x, y), (x+w, y+h,), (0, 255, 0), 3)
+
         if rectangle.any():
             status = 1
-            cv2.imwrite(f"images/{count}.png")
+            cv2.imwrite(f"images/{count}.png", frame)
             count = count + 1
-            get_img_path_dict = get_img_path_dict()
-            index = str(int((len(get_img_path_dict) / 2)))
-            image_with_object = get_img_path_dict[index]
 
     status_list.append(status)
     status_list = status_list[-2:]
+
     if status_list[0] == 1 and status_list[1] == 0:
-        send_email(image_with_object)
+
+        all_images = get_all_images()
+        index = str(int(len(all_images)/2))
+        image_with_object = all_images[index]
+        email_thread = Thread(target=send_email, args=(image_with_object, ))
+        email_thread.daemon = True
+
+        clean_thread = Thread(target=clean_folder)
+        clean_thread.daemon = True
+
+        email_thread.start()
+        time.sleep(2)
+        clean_thread.start()
+    print(status_list)
 
     cv2.imshow("frame", frame)
     key = cv2.waitKey(1)
